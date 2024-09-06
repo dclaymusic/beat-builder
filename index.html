@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<link rel="stylesheet" href="style.css">
+<meta name="viewport" content="width=device-width, initial-scale=0.8" />
+<title>BEAT BUILDER - DRAFT 1</title>
+<script src="snd.js"></script>
+<script src="play.js"></script>
+<script src="mouse.js"></script>
+<script src="start.js"></script>
+<script src="map.js"></script>
+<script type="text/javascript">
+
+    var hasStarted = false;
+    var soundInit = false;
+    var infoWindow = false;
+    var isPlaying = false;
+    var allBuffersLoaded = false;
+    var tempo = 500;
+    var timer;
+    var loadedSnd = null;
+    var sequenceStep = 0;
+    var availableSounds = 3; // this is 24 because there are 24 sounds in the left div.
+    var tileset = null, tilesetURL = "tiles.png",  tilesetLoaded = false;
+    const scale = 2;
+    const w = 600;
+    const h = 450;
+    const width = w*scale;
+    const height = h*scale;
+    const tileW = 150;
+    const tileH = 150;
+    var mapW = 8;
+    var mapH = 6;
+    var gameMap = [];
+    for(let i = 0; i < mapW*mapH; i++) { gameMap[i] = 0; }
+    var ctx = null;
+    var currentSecond = 0, frameCount = 0, framesLastSecond = 0, lastFrameTime = 0;
+    var mousePos = [];
+    var loading;
+    var instrumentChoice = 's';
+    var numberOfLayers = 1;
+    var stepIndex = [0,0];
+
+    var tileTypes = {
+
+        0: { index: 's0', sprite:[{x:tileW*0, y:tileH*0, w:tileW, h:tileH}]},
+        1: { index: 's1', sprite:[{x:tileW*1, y:tileH*0, w:tileW, h:tileH}]},
+        2: { index: 's2', sprite:[{x:tileW*2, y:tileH*0, w:tileW, h:tileH}]},
+        3: { index: 's3', sprite:[{x:tileW*0, y:tileH*1, w:tileW, h:tileH}]},
+        // 4: { index: 's4', sprite:[{x:tileW*1, y:tileH*1, w:tileW, h:tileH}]},
+        // 5: { index: 's5', sprite:[{x:tileW*2, y:tileH*1, w:tileW, h:tileH}]},
+        // 6: { index: 's6', sprite:[{x:tileW*0, y:tileH*2, w:tileW, h:tileH}]},
+        // 6: { index: 's6', sprite:[{x:tileW*2, y:tileH*0, w:tileW, h:tileH}]},
+        // 7: { index: 's7', sprite:[{x:tileW*6, y:tileH*0, w:tileW, h:tileH}]},
+        // 8: { index: 's8', sprite:[{x:tileW*7, y:tileH*0, w:tileW, h:tileH}]},
+        // 9: { index: 's9', sprite:[{x:tileW*0, y:tileH*1, w:tileW, h:tileH}]},
+        // 10: { index: 's10', sprite:[{x:tileW*1, y:tileH*1, w:tileW, h:tileH}]},
+        // 11: { index: 's11', sprite:[{x:tileW*2, y:tileH*1, w:tileW, h:tileH}]},
+        // 12: { index: 's12', sprite:[{x:tileW*3, y:tileH*1, w:tileW, h:tileH}]},
+        // 13: { index: 's13', sprite:[{x:tileW*4, y:tileH*1, w:tileW, h:tileH}]},
+        // 14: { index: 's14', sprite:[{x:tileW*5, y:tileH*1, w:tileW, h:tileH}]},
+        // 15: { index: 's15', sprite:[{x:tileW*6, y:tileH*1, w:tileW, h:tileH}]},
+        // 16: { index: 's16', sprite:[{x:tileW*7, y:tileH*1, w:tileW, h:tileH}]},
+        // 17: { index: 's17', sprite:[{x:tileW*0, y:tileH*2, w:tileW, h:tileH}]},
+        // 18: { index: 's18', sprite:[{x:tileW*1, y:tileH*2, w:tileW, h:tileH}]},
+        // 19: { index: 's19', sprite:[{x:tileW*2, y:tileH*2, w:tileW, h:tileH}]},
+        // 20: { index: 's20', sprite:[{x:tileW*3, y:tileH*2, w:tileW, h:tileH}]},
+        // 21: { index: 's21', sprite:[{x:tileW*4, y:tileH*2, w:tileW, h:tileH}]},
+        // 22: { index: 's22', sprite:[{x:tileW*5, y:tileH*2, w:tileW, h:tileH}]},
+        // 23: { index: 's23', sprite:[{x:tileW*6, y:tileH*2, w:tileW, h:tileH}]},
+        // 24: { index: 's24', sprite:[{x:tileW*7, y:tileH*2, w:tileW, h:tileH}]},
+
+    }
+
+    //var masterGain = audioCtx.createGain();
+    //Viewport Scanning
+    var viewport = { screen : [0,0] };
+
+    window.onload = function()
+    {
+        ctx = document.getElementById('game').getContext("2d");
+        requestAnimationFrame(drawGame);
+        ctx.font = "bold 10pt sans-serif";
+
+        //window.addEventListener('mousemove', function(e) { getHoverOver(e) });
+        window.addEventListener('click', function(e) { clickHandler(e) });
+        window.addEventListener('mousemove', function(e) { mousePos = getHoverOver(e); });
+        
+        viewport.screen = [document.getElementById('game').width,
+            document.getElementById('game').height];
+
+        //tileset code goes here
+        loadImages();
+        
+    };
+
+    
+    function drawGame()
+    {
+        if(ctx==null) { return; }
+        var currentFrameTime = Date.now();
+        var timeElapsed = currentFrameTime - lastFrameTime;
+        var sec = Math.floor(Date.now()/1000);
+        if(sec!=currentSecond)
+        {
+            currentSecond = sec;
+            framesLastSecond = frameCount;
+            frameCount = 1;
+        }
+        else { frameCount++; }
+
+        //////////////////////////////draw background
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, viewport.screen[0], viewport.screen[1]);
+
+        //draw map
+        if(hasStarted) //app is playing 
+        { 
+            drawCurrentMap();
+            drawCursor();
+            if(isPlaying) { drawStepSequencer(); }
+            drawGridlines();
+            drawSectionLines(numberOfLayers);
+
+        }
+        // else if(!hasStarted) //loading sounds
+        // { loadbarHandler(); }
+
+        // frameRate();
+        lastFrameTime = currentFrameTime;
+        requestAnimationFrame(drawGame);
+    }
+
+
+</script>
+
+</head>
+<body>
+<div id="main">
+    <div id="loadscreen">
+        <h1 id="title">Beat Builder!</h1>
+        <p id="description">Add rhythms to the steady beat.</p>
+        <!-- <div id="loadbarfull"> </div>
+        <div id="loadbarloading"></div> -->
+        <p id="loadtext">Click anywhere to load.</p>
+    </div>
+    <div id=mainscreen>
+        <div id="leftdiv">
+            <div>
+                <p id="soundtitle">Rhythms:</p>
+                <div id="sounddiv">
+                    <img id="s0" class='sound' src="img/s0.png" onclick="pickSnd(0)">
+                    <img id="s1" class='sound' src="img/s1.png" onclick="pickSnd(1)">
+                    <img id="s2" class='sound' src="img/s2.png" onclick="pickSnd(2)">
+                    <img id="s3" class='sound' src="img/s3.png" onclick="pickSnd(3)">
+                    <!-- <img id="s4" class='sound' src="img/s4.png" onclick="pickSnd(4)">
+                    <img id="s5" class='sound' src="img/s5.png" onclick="pickSnd(5)">
+                    <img id="s6" class='sound' src="img/s6.png" onclick="pickSnd(6)">
+                    <img id="s7" class='sound' src="img/s7.png" onclick="pickSnd(7)">
+                    <img id="s8" class='sound' src="img/s8.png" onclick="pickSnd(8)">
+                    <img id="s13" class='sound' src="img/s13.png" onclick="pickSnd(13)">
+                    <img id="s9" class='sound' src="img/s9.png" onclick="pickSnd(9)">
+                    <img id="s10" class='sound' src="img/s10.png" onclick="pickSnd(10)">
+                    <img id="s11" class='sound' src="img/s11.png" onclick="pickSnd(11)">
+                    <img id="s12" class='sound' src="img/s12.png" onclick="pickSnd(12)">
+                    <img id="s14" class='sound' src="img/s14.png" onclick="pickSnd(14)">
+                    <img id="s15" class='sound' src="img/s15.png" onclick="pickSnd(15)">
+                    <img id="s16" class='sound' src="img/s16.png" onclick="pickSnd(16)">
+                    <img id="s17" class='sound' src="img/s17.png" onclick="pickSnd(17)">
+                    <img id="s18" class='sound' src="img/s18.png" onclick="pickSnd(18)">
+                    <img id="s19" class='sound' src="img/s19.png" onclick="pickSnd(19)">
+                    <img id="s20" class='sound' src="img/s20.png" onclick="pickSnd(20)">
+                    <img id="s21" class='sound' src="img/s21.png" onclick="pickSnd(21)">
+                    <img id="s22" class='sound' src="img/s22.png" onclick="pickSnd(22)">
+                    <img id="s23" class='sound' src="img/s23.png" onclick="pickSnd(23)">
+                    <img id="s24" class='sound' src="img/s24.png" onclick="pickSnd(24)"> -->
+                </div> 
+            </div>
+        </div>
+        <canvas id="game" width="1200" height="900"></canvas>
+        <div id="rightdiv"> 
+            <button id="play" onclick="togglePlay()">Play</button>
+            <div id="tempodiv">
+                <label for="tempo">
+                Tempo:
+              </label>
+              <input onchange="changeTempo()" type="number" step="1" id="tempo" min="60" max="999" value="120" />
+            </div>
+            <div id="layerdiv">
+                <label for="layers">Layers:<br></label>
+                <select name="layers" onchange="toggleLayers()" id="layers">
+                    <option value="1">1</option>
+                    <option value="2">2</option>
+                    <option value="3">3</option>
+                    <option value="6">6</option>
+                </select>
+            </div>
+            <button id="shuffle" onclick="shuffle()">Shuffle</button>
+            <button id="clear" onclick="clearAll()">Clear</button>
+        </div>
+    </div>
+</div> 
+</body>
+</html>
